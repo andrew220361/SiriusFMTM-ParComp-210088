@@ -98,6 +98,10 @@ void ProcessRequest(int a_sd)
     // 0-terminate the bytes received:
     reqBuff[rc] = '\0';
 
+    // Disconnect this client at the end of servicing this req, UNLESS
+    // explicitly asked to keep the connection alive:
+    int keepAlive  = 0;
+
     // If we got here: Received (rc) bytes, rc > 0:
     // XXX: We assume that we have received the whole req (1st line + headers)
     // at once, otherwise parsing would become REALLY complex:
@@ -117,7 +121,7 @@ void ProcessRequest(int a_sd)
       // Send the 501 error to the client:
       strcpy(sendBuff, "HTTP/1.1 501 Unsupported request\r\n\r\n");
       send  (a_sd, sendBuff, strlen(sendBuff), 0);
-      continue;
+      goto NextReq;
     }
     // 0-terminate the 1st line:
     char*  lineEnd =  strstr(reqBuff, "\r\n");
@@ -136,7 +140,7 @@ void ProcessRequest(int a_sd)
       // Send the 501 error to the client:
       strcpy(sendBuff, "HTTP/1.1 501 Missing Path\r\n\r\n");
       send  (a_sd, sendBuff, strlen(sendBuff), 0);
-      continue;
+      goto NextReq;
     }
     // OK, got a valid and framed path:
     assert(path != NULL);
@@ -151,12 +155,11 @@ void ProcessRequest(int a_sd)
       strcpy(sendBuff,
         "HTTP/1.1 501 Unsupported/Invalid HTTP Version\r\n\r\n");
       send  (a_sd, sendBuff, strlen(sendBuff), 0);
-      continue;
+      goto NextReq;
     }
     // Parse the Headers. We are only interested in the "Connection: " header:
     char const* nextLine = httpVer + 10;  // Was: "HTTP/1.1\r\n"
     char const* connHdr  = strstr(nextLine, "Connection: ");
-    int       keepAlive  = 1;
 
     if (connHdr != NULL)
     {
@@ -164,10 +167,10 @@ void ProcessRequest(int a_sd)
       // Skip any further spaces:
       for (; *connHdrVal == ' '; ++connHdrVal) ;
 
-      if (strncasecmp(connHdrVal, "Close", 5) == 0)
-        keepAlive = 0;
+      if (strncasecmp(connHdrVal, "Keep-Alive", 11) == 0)
+        keepAlive = 1;
       else
-      if (strncasecmp(connHdrVal, "Keep-Alive", 11) != 0)
+      if (strncasecmp(connHdrVal, "Close", 5) != 0)
         connHdr = NULL;  // INVALID!
     }
     if (connHdr == NULL)
@@ -179,7 +182,7 @@ void ProcessRequest(int a_sd)
       strcpy(sendBuff,
         "HTTP/1.1 501 Missing/Invalid Connection Header\r\n\r\n");
       send  (a_sd, sendBuff, strlen(sendBuff), 0);
-      continue;
+      goto NextReq;
     }
     // Got Path and KeepAlive params!
     // FIXME: Security considerations are very weak here!
@@ -192,15 +195,18 @@ void ProcessRequest(int a_sd)
     // Open the file specified by path:
     int fd = open(path, O_RDONLY);
 
-    struct  stat statBuff;
-    rc     = (fd < 0) ? (-1) : fstat(fd, &statBuff);
-    if (rc < 0)
+    struct stat statBuff;
+    rc   = fstat(fd, &statBuff);
+    // We can only service regular files:
+    int isRegFile = S_ISREG(statBuff.st_mode);
+
+    if (fd < 0 || rc < 0 || !isRegFile)
     {
       fprintf(stderr,  "INFO: Missing/Unaccessible file: %s\n", path);
       // Send a 401 error to the client:
       strcpy(sendBuff, "HTTP/1.1 401 Missing File\r\n\r\n");
       send  (a_sd, sendBuff, strlen(sendBuff), 0);
-      continue;
+      goto NextReq;
     }
     // Get the file size:
     size_t fileSize = statBuff.st_size;
@@ -239,6 +245,7 @@ void ProcessRequest(int a_sd)
       }
     }
     // Done with this Req:
+  NextReq:
     if (!keepAlive)
     {
       close(a_sd);
