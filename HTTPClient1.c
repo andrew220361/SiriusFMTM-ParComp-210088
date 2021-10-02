@@ -83,7 +83,11 @@ int main(int argc, char* argv[])
   // Get the hostIP: Make DNS enquiery (XXX: BLOCKING, NON-THREAD-SAFE!):    //
   //-------------------------------------------------------------------------//
   struct hostent* he = gethostbyname(hostName);
-  if (he == NULL || he->h_length == 0)
+  int nAddrs = 0;
+  for (; he != NULL && he->h_addr_list[nAddrs] != NULL; ++nAddrs) ;
+
+  if (he == NULL || he->h_length !=4 || he->h_addrtype != AF_INET ||
+      nAddrs == 0)
   {
     fprintf(stderr, "ERROR: Cannot resolve HostName: %s\n", hostName);
     return 1;
@@ -91,7 +95,7 @@ int main(int argc, char* argv[])
   // Get a random address from the list received:
   struct timeval tv;
   (void) gettimeofday(&tv, NULL);
-  int h  = (int)tv.tv_usec % he->h_length;
+  int h  = (int)tv.tv_usec % nAddrs;
   struct in_addr const* ia = (struct in_addr const*)(he->h_addr_list[h]);
 
   //-------------------------------------------------------------------------//
@@ -150,7 +154,6 @@ int main(int argc, char* argv[])
     close(sd);
     return 1;
   }
-  sleep(10);
   //-------------------------------------------------------------------------//
   // Get the response:                                                       //
   //-------------------------------------------------------------------------//
@@ -161,7 +164,6 @@ int main(int argc, char* argv[])
     // rc >  0: #bytes received
     // rc <  0: error
     // rc == 0: the server has closed connection
-    //
     if (rc < 0)
     {
       fprintf(stderr, "ERROR: recv failed: %s, errno=%d\n",
@@ -175,7 +177,9 @@ int main(int argc, char* argv[])
 
     // Recv successful! 0-terminate the string and print what we got:
     recvBuff[rc] = '\0';
-    puts(recvBuff);
+
+    // Don't use "puts" or so, use binary write to the standard output:
+    (void) write(1, recvBuff, rc);
   }
   //-------------------------------------------------------------------------//
   // Clean-up:                                                               //
