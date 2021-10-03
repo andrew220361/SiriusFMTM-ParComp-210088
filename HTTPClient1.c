@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <signal.h>
 
 int main(int argc, char* argv[])
 {
@@ -115,14 +116,22 @@ int main(int argc, char* argv[])
   sa.sin_addr   = *ia;
   sa.sin_port   = htons((uint16_t)port);
 
-  int rc = connect(sd, (struct sockaddr const*)(&sa), sizeof(sa));
-  if (rc < 0)
+  int rc = 0;
+  while (1)
   {
-    fprintf(stderr, "ERROR: Cannot connect to server: SD=%d, IP=%s, Port=%d: "
-            "%s, errno=%d\n",
-            sd, inet_ntoa(sa.sin_addr), port, strerror(errno), errno);
-    close(sd);
-    return 1;
+    rc = connect(sd, (struct sockaddr const*)(&sa), sizeof(sa));
+    if (rc < 0)
+    {
+      if (errno == EINTR)
+        continue;  // Innocent error
+
+      // Any other error: exit:
+      fprintf(stderr, "ERROR: Cannot connect to server: SD=%d, IP=%s, Port=%d: "
+              "%s, errno=%d\n",
+              sd, inet_ntoa(sa.sin_addr), port, strerror(errno), errno);
+      close(sd);
+      return 1;
+    }
   }
   // If we got here, TCP connect was successful!
 
@@ -166,6 +175,10 @@ int main(int argc, char* argv[])
     // rc == 0: the server has closed connection
     if (rc < 0)
     {
+      if (errno == EINTR)
+        continue;  // Innocent, just try again
+
+      // ANy other error: exit:
       fprintf(stderr, "ERROR: recv failed: %s, errno=%d\n",
               strerror(errno), errno);
       close(sd);

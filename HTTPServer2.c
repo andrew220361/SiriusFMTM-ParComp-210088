@@ -1,7 +1,7 @@
 // vim:ts=2:et
 //===========================================================================//
-//                                "HTTPServer1.c":                           //
-//                          Simple Sequential HTTP Server                    //
+//                                "HTTPServer2.c":                           //
+//                 Simple Concurrent (Multi-Process) HTTP Server             //
 //===========================================================================//
 #include <stdio.h>
 #include <string.h>
@@ -13,6 +13,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -20,6 +21,7 @@
 #include <signal.h>
 
 static void ProcessRequests(int a_sd);
+static void SigHandler     (int a_signum);
 
 //===========================================================================//
 // "main":                                                                   //
@@ -59,6 +61,11 @@ int main(int argc, char* argv[])
   // Create listen queue for 1024 clients:
   (void) listen(sd, 1024);
 
+  // Setup the signal handler to get asynchronous notifications of child
+  // process terminations. Ignore the return valud (void), check errno instead:
+  (void) signal(SIGCHLD, SigHandler);
+  assert(errno == 0);
+
   // Acceptor Loop:
   while (1)
   {
@@ -76,10 +83,20 @@ int main(int argc, char* argv[])
                strerror(errno), errno);
       return 1;
     }
-    // XXX: Clients are services SEQUNTIALLY. If the currently-connected client
-    // sends multiple reqs, all other clients will be locked out until this one
-    // disconnects:
-    ProcessRequests(sd1);
+
+    // Create a new process which will deal with the connected client:
+    if (fork() == 0)
+    {
+      // This is a Child Process which will actually service the request, and
+      // then terminate:
+      ProcessRequests(sd1);
+      return 0;
+    }
+    // In parent: close the socket "sd1", otherwise it will not be fully closed
+    // in child:
+    close(sd1);
+
+    // Parent proceeds to the next "accept" immediately!
   }
   return 0;
 }
@@ -103,7 +120,7 @@ void ProcessRequests(int a_sd)
     int rc = recv(a_sd, reqBuff, sizeof(reqBuff)-1, 0); // Space for '\0'
     if (rc < 0)
     {
-      if (errno == EINTR)
+      if (errno == EINTR) // Innocent error, just try again
         continue;
       // Any other error: exit:
       fprintf(stderr, "WARNING: SD=%d, recv failed: %s, errno=%d\n",
@@ -279,4 +296,16 @@ void ProcessRequests(int a_sd)
   __builtin_unreachable();
 }
 
+//===========================================================================//
+// "SigHandler":                                                             //
+//===========================================================================//
+void SigHandler(int a_signum)
+{
+  assert(a_signum == SIGCHLD);
+  fputs("INFO: Received SIGCHLD\n", stderr);
+
+  // Check (non-blocking) if any children have terminated, to prevent them from
+  // turning into zombies:
+  waitpid(-1, NULL, WNOHANG);
+}
 
