@@ -59,6 +59,14 @@ int ServerSetup(int argc, char* argv[])
   // Create listen queue for 1024 clients:
   (void) listen(sd, 1024);
 
+  // ALso, for safety, chroot to the current dir:
+  if (geteuid() == 0)
+  {
+    rc = chroot(".");
+    fprintf(stderr, "INFO: chroot: rc=%d, errno=%d\n", rc, errno);
+    if (rc < 0)
+      return -1;
+  }
   // Setup successful:
   assert(sd >= 0);
   return sd;
