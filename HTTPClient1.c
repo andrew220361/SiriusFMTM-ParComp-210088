@@ -10,6 +10,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <signal.h>
+#include <assert.h>
 
 int main(int argc, char* argv[])
 {
@@ -132,6 +133,8 @@ int main(int argc, char* argv[])
       close(sd);
       return 1;
     }
+    assert(rc >= 0);
+    break; // Successfully connected
   }
   // If we got here, TCP connect was successful!
 
