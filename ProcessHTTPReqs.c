@@ -19,7 +19,7 @@
 //===========================================================================//
 // "ProcessHTTPReq":                                                         //
 //===========================================================================//
-void ProcessHTTPReqs(int a_sd)
+int ProcessHTTPReqs(int a_sd)
 {
   assert(a_sd >= 0);
   char reqBuff [1024];
@@ -41,14 +41,14 @@ void ProcessHTTPReqs(int a_sd)
       fprintf(stderr, "WARNING: SD=%d, recv failed: %s, errno=%d\n",
               a_sd, strerror(errno), errno);
       close(a_sd);
-      return;
+      return rc;
     }
     else
     if (rc == 0)
     {
       fprintf(stderr, "INFO: SD=%d: Client disconnected\n", a_sd);
       close(a_sd);
-      return;
+      return rc;
     }
     // 0-terminate the bytes received:
     reqBuff[rc] = '\0';
@@ -66,7 +66,7 @@ void ProcessHTTPReqs(int a_sd)
     {
       fprintf(stderr, "INFO: SD=%d, Incomplete Req, disconnecting", a_sd);
       close(a_sd);
-      return;
+      return rc;
     }
     // OK, got a possibly complete req:
     // Parse the 1st line. The method must be GET, others not supported:
@@ -190,7 +190,7 @@ void ProcessHTTPReqs(int a_sd)
                 a_sd, rc, strerror(errno), errno);
         close(fd);
         close(a_sd);
-        return;
+        return rc;
       }
       // Exit normally if got to the end of file (or file reading error):
       if (chunkSize < sizeof(sendBuff))
@@ -204,7 +204,7 @@ void ProcessHTTPReqs(int a_sd)
     if (!keepAlive)
     {
       close(a_sd);
-      return;
+      return 0;
     }
   }
   // This point is unreachable!

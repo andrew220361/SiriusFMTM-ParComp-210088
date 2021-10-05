@@ -1,10 +1,12 @@
 // vim:ts=2:et
 //===========================================================================//
-//                                "HTTPServer4.c":                           //
+//                                "HTTPServer4.cpp":                         //
 //           Simple Concurrent/Parallel Thread Pool-Based HTTP Server        //
 //===========================================================================//
 #include "ServerSetup.h"
 #include "ProcessHTTPReqs.h"
+#include "CircularBuffer.hpp"
+#include "ThreadPool.hpp"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -15,22 +17,16 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <assert.h>
-#include <pthread.h>
 
 //===========================================================================//
-// Thread Pool Setup:                                                        //
+// THreadPool-Related Types:                                                 //
 //===========================================================================//
-// Queue of items (Socket Descrs) to be processed:
-// "static" means that the variables declared below are visible to all functi-
-// ones of this compilation unit (this .c file), but NOT visible to other com-
-// pilation units (ie other files), to prevent "pollution" of the global name
-// space:
-static int const QSize  = 65536;
-static int const Q[QSize];
-static int       QFront =  0;
-static int       QBack  = -1;
+// Thereads consume int sokcet descrs, return nothing (void), XXX but for syn-
+// tacting reasons, it must be a non-void type, so use int again:
+using TP   = ThreadPool <int, int>;
 
-static void* ThreadBody(void* a_arg);
+// Wrapper must be (void*) -> (void*) for compatibility with PThreads API:
+static void* WrapperFunc(void* a_arg);
 
 //===========================================================================//
 // "main":                                                                   //
@@ -42,12 +38,16 @@ int main(int argc, char* argv[])
   if (sd < 0)
     return 1;
 
-  // Create the Pool of Threads: Default size is 100:
-  int poolSize = (argc >= 3) ? atoi(argv[2]) : 100;
+  // Create the Pool of Threads:
+  // [2]: #Threads         = M
+  // [3]: CircBuffCapacity = N
+  //
+  int M = (argc >= 3) ? atoi(argv[2]) :   128;
+  int N = (argc >= 4) ? atoi(argv[3]) : 16384;
 
+  // Create the ThreadPool:
+  TP tp(M, N, WrapperFunc, ProcessHTTPReqs);
 
-
-  // Acceptor Loop:
   while (1)
   {
     // Accept a connection, create a data exchange socket:
@@ -64,33 +64,23 @@ int main(int argc, char* argv[])
                strerror(errno), errno);
       return 1;
     }
-
-    // Create a new thread which will deal with the connected client:
-    // XXX: The thread will be created with default attributes:
-    pthread_t th;   // Thread Handle
-
-    int rc = pthread_create(&th, NULL, ThreadBody, &sd1);
-    if (rc < 0)
-    {
-      fprintf(stderr, "ERROR: pthread_create failed: %s, errno=%d\n",
-              strerror(errno), errno);
-      return 1;
-    }
-    // Parent proceeds to the next "accept" immediately!
+    // Submit an asynchronous job to the ThreadPool. We don't need a result,
+    // hence NULL ptr:
+    tp.SubmitJob(sd, NULL);
   }
   return 0;
 }
 
 //===========================================================================//
-// "ThreadBody":                                                             //
+// "WrapperFunc":                                                            //
 //===========================================================================//
-void* ThreadBody(void* a_arg)
+void* WrapperFunc(void* a_arg)
 {
-  // "a_arg" is actually a ptr to client-communicating socket descr sd1:
-  assert    (a_arg != NULL);
-  int const* sd1ptr = (int const*) a_arg;
-  int  sd1 = *sd1ptr;
+  // "a_arg" is a ptr to the ThreadPool object:
+  assert   (a_arg != NULL);
+  TP* tp = (TP*)(a_arg);
 
-  ProcessHTTPReqs(sd1);
-  return NULL;    // The return value is not used
+  // Invoke the method "ThreadBody" on the "ThreadPool" obj pointed to by "tp":
+  tp->ThreadBody();
+  return NULL;
 }
