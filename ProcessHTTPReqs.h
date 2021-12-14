@@ -5,4 +5,8 @@
 //===========================================================================//
 #pragma once
 
-extern void ProcessHTTPReqs(int a_sd);
+extern
+#ifdef __cplusplus
+  "C"
+#endif
+  void ProcessHTTPReqs(int a_sd);

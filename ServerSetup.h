@@ -6,4 +6,8 @@
 #pragma once
 
 // Returns the Acceptor Socket, or (-1) on error:
-extern int ServerSetup(int argc, char* argv[]);
+extern
+#ifdef __cplusplus
+  "C"
+#endif
+int ServerSetup(int argc, char* argv[]);
