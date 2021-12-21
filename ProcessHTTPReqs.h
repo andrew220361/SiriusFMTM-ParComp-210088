@@ -5,8 +5,11 @@
 //===========================================================================//
 #pragma once
 
-extern
+//---------------------------------------------------------------------------//
+// "ProcessHTTPReqs": Dealing with an HTTP Client via a Socket Descr:        //
+//---------------------------------------------------------------------------//
 #ifdef __cplusplus
-  "C"
+extern "C" int ProcessHTTPReqs(int a_sd);
+#else
+extern     int ProcessHTTPReqs(int a_sd);
 #endif
-  void ProcessHTTPReqs(int a_sd);

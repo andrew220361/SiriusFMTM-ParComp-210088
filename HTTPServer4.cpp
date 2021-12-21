@@ -1,6 +1,6 @@
 // vim:ts=2:et
 //===========================================================================//
-//                               "HTTPServer4.cpp":                          //
+//                                "HTTPServer4.cpp":                         //
 //           Simple Concurrent/Parallel Thread Pool-Based HTTP Server        //
 //===========================================================================//
 #include "ServerSetup.h"
@@ -16,7 +16,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <assert.h>
-#include <pthread.h>
 
 //===========================================================================//
 // "main":                                                                   //
@@ -55,9 +54,8 @@ int main(int argc, char* argv[])
                strerror(errno), errno);
       return 1;
     }
-    // Submit the client-connect socket ("sd1") to ThreadPool for
-    // processing:
-    tp.Submit(sd1);
+    // Submit an asynchronous job to the ThreadPool. We don't need a result:
+    tp.Submit(sd);
   }
   return 0;
 }

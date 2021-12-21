@@ -73,6 +73,6 @@ void* ThreadBody(void* a_arg)
   int const* sd1ptr = (int const*) a_arg;
   int  sd1 = *sd1ptr;
 
-  ProcessHTTPReqs(sd1);
+  (void) ProcessHTTPReqs(sd1);
   return NULL;    // The return value is not used
 }

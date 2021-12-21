@@ -1,4 +1,4 @@
-OPTS = -Wall -g
+OPTS = -Wall -g -DUSE_BOOST
 
 all: HTTPClient1 HTTPServer1 HTTPServer2 HTTPServer3 HTTPServer4
 
@@ -21,8 +21,10 @@ HTTPServer3: HTTPServer3.c \
 	cc -o $@ -pthread $(OPTS) HTTPServer3.c ProcessHTTPReqs.o ServerSetup.o
 
 HTTPServer4: HTTPServer4.cpp \
-             ProcessHTTPReqs.o ProcessHTTPReqs.h ThreadPool.hpp \
-             ServerSetup.o     ServerSetup.h
+             ProcessHTTPReqs.o ProcessHTTPReqs.h \
+             ServerSetup.o     ServerSetup.h     \
+             CircularBuffer.hpp \
+             ThreadPool.hpp
 	c++ -o $@ -pthread $(OPTS) HTTPServer4.cpp ProcessHTTPReqs.o ServerSetup.o
 
 ProcessHTTPReqs.o: ProcessHTTPReqs.c ProcessHTTPReqs.h
@@ -31,3 +33,5 @@ ProcessHTTPReqs.o: ProcessHTTPReqs.c ProcessHTTPReqs.h
 ServerSetup.o: ServerSetup.c ServerSetup.h
 	cc -o $@ -c $(OPTS) $<
 
+clean:
+	rm -f *.o HTTPClient1 HTTPServer1 HTTPServer2 HTTPServer3 HTTPServer4

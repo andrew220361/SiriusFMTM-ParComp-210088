@@ -54,12 +54,10 @@ int main(int argc, char* argv[])
 
     // Create a new process which will deal with the connected client:
     if (fork() == 0)
-    {
       // This is a Child Process which will actually service the request, and
       // then terminate:
-      ProcessHTTPReqs(sd1);
-      return 0;
-    }
+      return ProcessHTTPReqs(sd1);
+
     // In parent: close the socket "sd1", otherwise it will not be fully closed
     // in child:
     close(sd1);

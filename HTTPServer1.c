@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
     // XXX: Clients are services SEQUNTIALLY. If the currently-connected client
     // sends multiple reqs, all other clients will be locked out until this one
     // disconnects:
-    ProcessHTTPReqs(sd1);
+    (void) ProcessHTTPReqs(sd1);
   }
   return 0;
 }

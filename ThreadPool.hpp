@@ -4,13 +4,18 @@
 //                            Generic Thread Pool                             //
 //============================================================================//
 #pragma once
+#ifdef   USE_BOOST
 #include <boost/circular_buffer.hpp>
+#else
+#include "CircularBuffer.hpp"
+#endif
 #include <boost/core/noncopyable.hpp>
 #include <pthread.h>
 #include <stdexcept>
 #include <type_traits>
 #include <cassert>
 #include <iostream>
+#include <vector>
 
 namespace SiriusFMTM
 {
@@ -27,7 +32,11 @@ namespace SiriusFMTM
     // Data Flds:                                                             //
     //------------------------------------------------------------------------//
     // {WorkItem, PtrWhereToPutTheRes>:
+#   ifdef USE_BOOST
     using CB = boost::circular_buffer<std::pair<WorkItem, Res*>>;
+#   else
+    using CB = CircularBuffer        <std::pair<WorkItem, Res*>>;
+#   endif
     std::vector<pthread_t>  m_threads;
     Func const*             m_func;
     CB                      m_buff;
@@ -111,6 +120,7 @@ namespace SiriusFMTM
         if (rc != 0)
           throw std::runtime_error("ThreadPool::ThreadBody: Mutex lock failed");
 
+        // CRITICAL SECTION =================================================//
         while (m_buff.empty())
         {
           // Will have to wait for a new job to be "Submit"ted:
@@ -125,14 +135,19 @@ namespace SiriusFMTM
         }
         // If we got here, the Mutex is locked and the Buff is non-empty:
         // Get the front job from the Buff: {WorkItem, ResPtr}:
+#       ifdef USE_BOOST
         auto job = m_buff.front();
         m_buff.pop_front();
+#       else
+        auto job = m_buff.PopFront();
+#       endif
 
         // And only now unlick the Mutex:
         rc = pthread_mutex_unlock(&m_mutex);
         if (rc != 0)
           throw std::runtime_error
             ("ThreadPool::ThreadBody: Mutex unlock failed");
+        // END OF CRITICAL SECTION===========================================//
 
         // We have now got the WorkItem, process it via the actual "Func":
         // For syntactic correctness in all cases, need this "constexpr if":
