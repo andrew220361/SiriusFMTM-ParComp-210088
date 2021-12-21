@@ -204,6 +204,7 @@ int ProcessHTTPReqs(int a_sd)
     if (!keepAlive)
     {
       close(a_sd);
+      fprintf(stderr, "INFO: SD=%d closed: Keep-Alive=0\n", a_sd);
       return 0;
     }
   }

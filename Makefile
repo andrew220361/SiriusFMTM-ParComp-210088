@@ -1,6 +1,6 @@
 OPTS = -Wall -g -DUSE_BOOST
 
-all: HTTPClient1 HTTPServer1 HTTPServer2 HTTPServer3 HTTPServer4
+all: HTTPClient1 HTTPServer1 HTTPServer2 HTTPServer3 HTTPServer4 HugeMatrixMult
 
 HTTPClient1: HTTPClient1.c
 	cc -o $@ $(OPTS) $<
@@ -27,6 +27,9 @@ HTTPServer4: HTTPServer4.cpp \
              ThreadPool.hpp
 	c++ -o $@ -pthread $(OPTS) HTTPServer4.cpp ProcessHTTPReqs.o ServerSetup.o
 
+HugeMatrixMult: HugeMatrixMult.cpp ThreadPool.hpp
+	c++ -o $@ -pthread $(OPTS) HugeMatrixMult.cpp
+
 ProcessHTTPReqs.o: ProcessHTTPReqs.c ProcessHTTPReqs.h
 	cc -o $@ -c $(OPTS) $<
 
@@ -34,4 +37,5 @@ ServerSetup.o: ServerSetup.c ServerSetup.h
 	cc -o $@ -c $(OPTS) $<
 
 clean:
-	rm -f *.o HTTPClient1 HTTPServer1 HTTPServer2 HTTPServer3 HTTPServer4
+	rm -f *.o HTTPClient1 HTTPServer1 HTTPServer2 HTTPServer3 HTTPServer4 \
+		HugeMatrixMult

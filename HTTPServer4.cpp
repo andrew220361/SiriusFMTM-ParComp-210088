@@ -56,7 +56,12 @@ int main(int argc, char* argv[])
     }
     // Submit an asynchronous job to the ThreadPool. We don't need a result or
     // comletion status:
-    tp.Submit(sd);
+    bool rc = tp.Submit(sd1);
+    if (!rc)
+    {
+      fprintf(stderr, "ERROR: Could not submit SD=%d to ThreadPool\n", sd1);
+      close(sd1);
+    }
   }
   return 0;
 }
