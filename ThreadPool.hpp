@@ -27,15 +27,54 @@ namespace SiriusFMTM
   template<typename WorkItem, typename Res, typename Func>
   class ThreadPool: public boost::noncopyable
   {
+  public:
+    //------------------------------------------------------------------------//
+    // "JobStatusE":                                                          //
+    //------------------------------------------------------------------------//
+    enum class JobStatusE: int
+    {
+      UNDEFINED    = 0,
+      Queued       = 1,
+      InProcessing = 2,
+      Completed    = 3,
+      Failed       = 4
+    };
+
   private:
+    //------------------------------------------------------------------------//
+    // "JobDescr":                                                            //
+    //------------------------------------------------------------------------//
+    struct JobDescr
+    {
+      // Data Flds:
+      WorkItem    m_wi;
+      Res*        m_res;
+      JobStatusE* m_status;
+
+      // Default Ctor:
+      JobDescr()
+      : m_wi    (),
+        m_res   (nullptr),
+        m_status(nullptr)
+      {}
+
+      // Non-Default Ctor:
+      // "WorkItem" is supposed to be small enough to be passed by copy:
+      JobDescr(WorkItem a_wi, Res* a_res, JobStatusE* a_status)
+      : m_wi    (a_wi),
+        m_res   (a_res),
+        m_status(a_status)
+      {}
+    };
+
     //------------------------------------------------------------------------//
     // Data Flds:                                                             //
     //------------------------------------------------------------------------//
     // {WorkItem, PtrWhereToPutTheRes>:
 #   ifdef USE_BOOST
-    using CB = boost::circular_buffer<std::pair<WorkItem, Res*>>;
+    using CB = boost::circular_buffer<JobDescr>;
 #   else
-    using CB = CircularBuffer        <std::pair<WorkItem, Res*>>;
+    using CB = CircularBuffer        <JobDescr>;
 #   endif
     std::vector<pthread_t>  m_threads;
     Func const*             m_func;
@@ -120,7 +159,7 @@ namespace SiriusFMTM
         if (rc != 0)
           throw std::runtime_error("ThreadPool::ThreadBody: Mutex lock failed");
 
-        // CRITICAL SECTION =================================================//
+        // CRITICAL SECTION BEGIN ===========================================//
         while (m_buff.empty())
         {
           // Will have to wait for a new job to be "Submit"ted:
@@ -136,10 +175,10 @@ namespace SiriusFMTM
         // If we got here, the Mutex is locked and the Buff is non-empty:
         // Get the front job from the Buff: {WorkItem, ResPtr}:
 #       ifdef USE_BOOST
-        auto job = m_buff.front();
+        JobDescr job = m_buff.front();
         m_buff.pop_front();
 #       else
-        auto job = m_buff.PopFront();
+        JobDescr job = m_buff.PopFront();
 #       endif
 
         // And only now unlick the Mutex:
@@ -147,27 +186,37 @@ namespace SiriusFMTM
         if (rc != 0)
           throw std::runtime_error
             ("ThreadPool::ThreadBody: Mutex unlock failed");
-        // END OF CRITICAL SECTION===========================================//
+        // CRITICAL SECTION END =============================================//
 
         // We have now got the WorkItem, process it via the actual "Func":
         // For syntactic correctness in all cases, need this "constexpr if":
         // Catch exceptions locally to prevent exit from the main loop:
         try
         {
+          if (job.m_status != nullptr)
+            *job.m_status = JobStatusE::InProcessing;
+
           if constexpr(std::is_void_v<Res>) // Res is void
           {
-            assert(job.second == nullptr);  // No value to return
-            (*m_func)(job.first);
+            assert(job.m_res == nullptr);   // No value to return
+            (*m_func)(job.m_wi);
           }
           else                              // Res is NOT void
           {
-            Res res = (*m_func)(job.first);
+            Res res = (*m_func)(job.m_wi);
             // Save the res vis the Submitter-specified ptr (if not NULL):
-            if (job.second != nullptr)
-              *job.second = res;
+            if (job.m_res != nullptr)
+              *job.m_res = res;
           }
+          if (job.m_status != nullptr)
+            *job.m_status = JobStatusE::Completed;
         }
-        catch(...){}  // Catch and ignore ANY exceptions
+        catch(...)
+        {
+          // Mark the job as Failed:
+          if (job.m_status != nullptr)
+            *job.m_status = JobStatusE::Failed;
+        }
       }
       __builtin_unreachable();
     }
@@ -178,8 +227,14 @@ namespace SiriusFMTM
     //------------------------------------------------------------------------//
     // Returns "true" iff submission successful (i.e. the Buff was not full):
     //
-    bool Submit(WorkItem a_wi, Res* a_res = nullptr)
+    bool Submit
+    (
+      WorkItem    a_wi,
+      Res*        a_res    = nullptr,
+      JobStatusE* a_status = nullptr
+    )
     {
+      // CRITICAL SECTION BEGIN =============================================//
       int rc  = pthread_mutex_lock(&m_mutex);
       if (rc != 0)
         throw std::runtime_error("ThreadPool::Sunmit: Mutex lock failed");
@@ -189,14 +244,20 @@ namespace SiriusFMTM
       {
         rc = pthread_mutex_unlock(&m_mutex);
         assert(rc == 0);
-        return false; // No space!
+        // No space!
+        if (a_status != nullptr)
+          *a_status = JobStatusE::Failed;
+        return false;
       }
       // Do submit (at the back of the circular queue) and unlock the mutex:
-      m_buff.push_back({a_wi, a_res});
+      m_buff.push_back(JobDescr(a_wi, a_res, a_status));
       rc = pthread_mutex_unlock(&m_mutex);
+      // CRITICAL SECTION END ===============================================//
 
-      // Only after unlicking, signal the new condition to the thread(s)
+      // Only after unlocking, signal the new condition to the thread(s)
       // (otherwise, subsequent mutex lock in pthread_cond_wait() would fail):
+      if (a_status != nullptr)
+        *a_status = JobStatusE::Queued;
       pthread_cond_signal(&m_cv);
 
       // Success!

@@ -54,7 +54,8 @@ int main(int argc, char* argv[])
                strerror(errno), errno);
       return 1;
     }
-    // Submit an asynchronous job to the ThreadPool. We don't need a result:
+    // Submit an asynchronous job to the ThreadPool. We don't need a result or
+    // comletion status:
     tp.Submit(sd);
   }
   return 0;
